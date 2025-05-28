@@ -18,6 +18,7 @@ class Rule:
     """A rule for creating a recurrent task"""
 
     card_name: str
+    list_id: str
     year: int | None
     month: int | None
     day: int | None
@@ -27,10 +28,10 @@ class Rule:
 
 def get_cards(
     rules: list[Rule], evaluation_date: date, *, due_time: time = time(9, 0, 0)
-) -> list[tuple[str, datetime | None]]:
+) -> list[tuple[str, datetime | None, str]]:
     """Get cards from rules at an evaluation date"""
 
-    cards: list[tuple[str, datetime | None]] = []
+    cards: list[tuple[str, datetime | None, str]] = []
     for rule in rules:
         if rule.year is not None and rule.year != evaluation_date.year:
             continue
@@ -49,14 +50,13 @@ def get_cards(
             )
         )
 
-        cards.append((rule.card_name, card_due))
+        cards.append((rule.card_name, card_due, rule.list_id))
 
     return cards
 
 
 def create_cards(
-    cards: list[tuple[str, datetime | None]],
-    list_id: str,
+    cards: list[tuple[str, datetime | None, str]],
     api_key: str,
     token: str,
     *,
@@ -64,15 +64,17 @@ def create_cards(
 ) -> None:
     """Create cards from a list if they don't already exist"""
 
-    url = f"https://api.trello.com/1/lists/{list_id}/cards"
-    query = {"key": api_key, "token": token}
-    response = requests.get(url, params=query, timeout=timeout)
-    if response.status_code != 200:
-        raise RuntimeError("Couldn't get card list")
-    current_card_names = [card["name"] for card in response.json()]
+    current_card_names = {}
+    for list_id in set(list_id for _, _, list_id in cards):
+        url = f"https://api.trello.com/1/lists/{list_id}/cards"
+        query = {"key": api_key, "token": token}
+        response = requests.get(url, params=query, timeout=timeout)
+        if response.status_code != 200:
+            raise RuntimeError(f"Couldn't get card lista for {list_id}")
+        current_card_names[list_id] = [card["name"] for card in response.json()]
 
     url = "https://api.trello.com/1/cards"
-    for card_name, card_due in cards:
+    for card_name, card_due, list_id in cards:
         if card_name in current_card_names:
             continue
         query = {
@@ -96,7 +98,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "rules_filepath", type=Path, help="Path to a JSON file containing rules"
     )
-    parser.add_argument("list_id", type=str, help="ID of target list")
     parser.add_argument(
         "secrets_filepath",
         type=Path,
@@ -113,14 +114,13 @@ def main() -> None:
 
     with args.rules_filepath.open(encoding="UTF-8") as rules_file:
         rules = [Rule(**rule) for rule in json.load(rules_file)]
-    list_id = args.list_id
     with args.secrets_filepath.open(encoding="UTF-8") as secrets_file:
         secrets = json.load(secrets_file)
         api_key = secrets["api_key"]
         token = secrets["token"]
 
     cards = get_cards(rules, date.today())
-    create_cards(cards, list_id, api_key, token)
+    create_cards(cards, api_key, token)
 
 
 if __name__ == "__main__":
