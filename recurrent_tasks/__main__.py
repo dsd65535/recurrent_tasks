@@ -26,12 +26,21 @@ class Rule:
     due_in: int | None
 
 
+@dataclass
+class Card:
+    """A Trello Card"""
+
+    name: str
+    due: datetime | None
+    list_id: str
+
+
 def get_cards(
     rules: list[Rule], evaluation_date: date, *, due_time: time = time(9, 0, 0)
-) -> list[tuple[str, datetime | None, str]]:
+) -> list[Card]:
     """Get cards from rules at an evaluation date"""
 
-    cards: list[tuple[str, datetime | None, str]] = []
+    cards: list[Card] = []
     for rule in rules:
         if rule.year is not None and rule.year != evaluation_date.year:
             continue
@@ -50,13 +59,13 @@ def get_cards(
             )
         )
 
-        cards.append((rule.card_name, card_due, rule.list_id))
+        cards.append(Card(rule.card_name, card_due, rule.list_id))
 
     return cards
 
 
 def create_cards(
-    cards: list[tuple[str, datetime | None, str]],
+    cards: list[Card],
     api_key: str,
     token: str,
     *,
@@ -65,7 +74,7 @@ def create_cards(
     """Create cards from a list if they don't already exist"""
 
     current_card_names = {}
-    for list_id in set(list_id for _, _, list_id in cards):
+    for list_id in set(card.list_id for card in cards):
         url = f"https://api.trello.com/1/lists/{list_id}/cards"
         query = {"key": api_key, "token": token}
         response = requests.get(url, params=query, timeout=timeout)
@@ -74,20 +83,20 @@ def create_cards(
         current_card_names[list_id] = [card["name"] for card in response.json()]
 
     url = "https://api.trello.com/1/cards"
-    for card_name, card_due, list_id in cards:
-        if card_name in current_card_names:
+    for card in cards:
+        if card.name in current_card_names:
             continue
         query = {
-            "idList": list_id,
-            "name": card_name,
+            "idList": card.list_id,
+            "name": card.name,
             "key": api_key,
             "token": token,
         }
-        if card_due is not None:
-            query["due"] = card_due.astimezone(timezone.utc).isoformat()
+        if card.due is not None:
+            query["due"] = card.due.astimezone(timezone.utc).isoformat()
         response = requests.post(url, params=query, timeout=timeout)
         if response.status_code != 200:
-            raise RuntimeError(f"Couldn't create card {card_name}")
+            raise RuntimeError(f"Couldn't create card {card}")
 
 
 def parse_args() -> argparse.Namespace:
