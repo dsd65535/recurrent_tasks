@@ -33,10 +33,15 @@ class Card:
     name: str
     list_id: str
     due: datetime | None = None
+    due_reminder: int | None = None
 
 
 def get_cards(
-    rules: list[Rule], evaluation_date: date, *, due_time: time = time(9, 0, 0)
+    rules: list[Rule],
+    evaluation_date: date,
+    *,
+    due_time: time = time(9, 0, 0),
+    due_reminder: int | None = 1440,
 ) -> list[Card]:
     """Get cards from rules at an evaluation date"""
 
@@ -59,7 +64,7 @@ def get_cards(
             )
         )
 
-        cards.append(Card(rule.card_name, rule.list_id, card_due))
+        cards.append(Card(rule.card_name, rule.list_id, card_due, due_reminder))
 
     return cards
 
@@ -94,6 +99,8 @@ def create_cards(
         }
         if card.due is not None:
             query["due"] = card.due.astimezone(timezone.utc).isoformat()
+        if card.due_reminder is not None:
+            query["dueReminder"] = str(card.due_reminder)
         response = requests.post(url, params=query, timeout=timeout)
         if response.status_code != 200:
             raise RuntimeError(f"Couldn't create card {card}")
