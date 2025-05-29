@@ -31,8 +31,8 @@ class Card:
     """A Trello Card"""
 
     name: str
-    due: datetime | None
     list_id: str
+    due: datetime | None = None
 
 
 def get_cards(
@@ -59,7 +59,7 @@ def get_cards(
             )
         )
 
-        cards.append(Card(rule.card_name, card_due, rule.list_id))
+        cards.append(Card(rule.card_name, rule.list_id, card_due))
 
     return cards
 
